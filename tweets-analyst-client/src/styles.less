@@ -1,4 +1,28 @@
 /* You can add global styles to this file, and also import other style files */
 html {
     background-color: #333333;
+    .gradient-box {
+        border: 1px solid;
+        border-image: linear-gradient(214deg,#E76F51,#E9C46A, #F4A261, #2E3033) 10;    
+        border-radius: 15px;
+    }
+
+    .box {
+        position:relative;
+    }
+    
+    .box::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        border-radius: 15px;
+        padding: 0.5px;
+        background: linear-gradient(214deg, #E76F51, #E9C46A, #F4A261, #2E3033);
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: destination-out;
+        mask-composite: exclude;
+    }
 }

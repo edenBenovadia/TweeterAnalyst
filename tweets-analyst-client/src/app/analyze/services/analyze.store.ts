@@ -1,6 +1,7 @@
 import { Injectable } from "@angular/core";
 import { ComponentStore } from "@ngrx/component-store";
-import { catchError, combineLatest, EMPTY, Observable, switchMap, tap } from "rxjs";
+import * as _ from "lodash";
+import { catchError, combineLatest, EMPTY, Observable, switchMap, tap, filter, distinctUntilChanged, distinctUntilKeyChanged, skipWhile } from "rxjs";
 import { Aggregations, ChartEntities, Tweet, TimeRange } from '../'
 import { timeFormat, hash } from '../utils'
 import { TweetsHttpsService } from "./tweets-https.service";
@@ -32,11 +33,9 @@ export class AnalyzeStore extends ComponentStore<StocksSate> {
     super(emptySate);
   }
 
-  readonly loadTweetsVolume = this.effect((laod$) => {
-    return laod$.pipe(
-      switchMap(() => 
-        combineLatest([this.activeSymbol$, this.timeRange$, this.aggregation$])
-      ),
+  readonly loadTweetsVolume = this.effect((payload$: Observable<any[]>) => {
+    return payload$
+    .pipe(
       switchMap(([symbol, range, aggregation]) => {
         const from = this.getDateFromRangeFormatted(range);
         const until = this.getDateFromRangeFormatted(TimeRange.NONE);
@@ -51,11 +50,8 @@ export class AnalyzeStore extends ComponentStore<StocksSate> {
     );
   });
   
-  readonly loadTweetsInRange = this.effect((load$) => {
-    return load$.pipe(
-      switchMap(() => 
-        combineLatest([this.activeSymbol$, this.timeRange$])
-      ),
+  readonly loadTweetsInRange = this.effect((payload$: Observable<any[]>) => {
+    return payload$.pipe(
       switchMap(([symbol, range]) => {
         const from = this.getDateFromRange(range);
         const until = this.getDateFromRange(TimeRange.NONE);
@@ -143,13 +139,20 @@ export class AnalyzeStore extends ComponentStore<StocksSate> {
 
   readonly volumes$ = this.select(state => {
     const key = hash(state.activeSymbol + '_' + state.timeRange + '_' + state.aggregation);
-    return state.volumes.get(key);
+    if (!state.volumes.has(key)) {
+      this.loadTweetsVolume([state.activeSymbol, state.timeRange, state.aggregation]);
+    }
+
+    return state.volumes.get(key) || <ChartEntities> { name: '', series: [] };
   });
 
   readonly tweets$ = this.select(state => {
-    return state.volumes.get(state.activeSymbol);
-  });
+    if (!state.tweets.has(state.activeSymbol)) {
+      this.loadTweetsInRange([state.activeSymbol, state.timeRange]);
+    }
 
+    return state.tweets.get(state.activeSymbol) || [];
+  });
 
   /**
    * @param date 

@@ -20,7 +20,7 @@ export function transformToCharts(data: any[]): ChartEntities {
 
     for (let t of data) {
         transformed.push(<ChartEntity> {
-            name: Object.keys(t)[0],
+            time: Object.keys(t)[0],
             value: Object.values(t)[0],
         });
     }

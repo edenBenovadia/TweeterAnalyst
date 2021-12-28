@@ -1,51 +1,100 @@
-import { Component, OnInit } from '@angular/core';
-import { Aggregations, TimeRange } from '..';
+import { ChangeDetectorRef, Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { ChartEntities, ChartEntity, Tweet } from '..';
 import { AnalyzeStore } from '../services/analyze.store';
-import { TweetsHttpsService } from '../services/tweets-https.service';
+import { Subject, takeUntil } from 'rxjs';
+import * as _ from 'lodash';
+
 
 @Component({
   selector: 'chart',
   templateUrl: './chart.component.html',
-  styleUrls: ['./chart.component.less']
+  styleUrls: ['./chart.component.less'],
 })
-export class ChartComponent implements OnInit {
-  public tweets: any[] = [];
+export class ChartComponent implements OnInit, OnDestroy {
+  public tweets: Tweet[] = [];
+  public echartInstance: any;
+  public options: any;
+  public updateOptions: any;
+    
+  private destroy$: Subject<void> = new Subject();
 
-  constructor(private readonly analyzeStore: AnalyzeStore) { 
+  constructor(
+    private readonly analyzeStore: AnalyzeStore,
+    private readonly cd: ChangeDetectorRef,
+  ) { 
   }
 
   ngOnInit(): void {
-    this.analyzeStore.tweets$.subscribe(t => console.log(t));
-    this.analyzeStore.volumes$.subscribe(t => console.log(t));
+    this.analyzeStore.volumes$
+    .pipe(
+      takeUntil(this.destroy$),
+    ).subscribe((entities: ChartEntities) => {
+      this.updateChart(entities);
+    });   
+
+    this.options = {
+      xAxis: {
+        silent: true,
+        splitLine: {
+          show: false,
+        },
+      },
+      yAxis: {},
+      series: [
+        {
+          name: 'some name',
+          type: 'line',
+          animationDelay: (idx: any) => idx * 10 + 100,
+        },
+      ],
+      legend: {
+        data: [''],
+        align: 'left',
+      },
+      tooltip: {},
+      animationEasing: 'elasticOut',
+      animationDelayUpdate: (idx: any) => idx * 5,
+    };
   }
 
-  view: any[] = [600, 300];
+  private updateChart(entities: ChartEntities) {
+    const xAxisData: string[] = [];
+    const data: string[] = []
+    entities.series.forEach((t: ChartEntity) => {
+      xAxisData.push(new Date(t.time).toDateString());
+      data.push(t.value);
+    });
+    if (!this.echartInstance) {
+      return;
+    }
 
-  // options
-  legend: boolean = false;
-  showLabels: boolean = true;
-  animations: boolean = true;
-  xAxis: boolean = true;
-  yAxis: boolean = true;
-  showYAxisLabel: boolean = false;
-  showXAxisLabel: boolean = false;
-  xAxisLabel: string = 'time';
-  yAxisLabel: string = 'value';
-  timeline: boolean = true;
+    this.echartInstance.setOption({
+      series: [
+        {
+          name: 'bar',
+          type: 'line',
+          data: data,
+        },
+      ],
+      xAxis: {
+        data: xAxisData,
+      },
+      yAxis: {
 
-  colorScheme = {
-    domain: ['#45c3c8'],
-  };
-
-  onSelect(data: any): void {
-    console.log('Item clicked', JSON.parse(JSON.stringify(data)));
+      },
+    }, {notMerge: true, replaceMerge: ['xAxis', 'series']});
   }
 
-  onActivate(data: any): void {
-    console.log('Activate', JSON.parse(JSON.stringify(data)));
+  public onChartInit(ec: any) {
+    if (!ec)
+      return;
+
+    this.echartInstance = ec
   }
 
-  onDeactivate(data: any): void {
-    console.log('Deactivate', JSON.parse(JSON.stringify(data)));
+  ngOnDestroy(): void {
+      this.destroy$.next();
+      this.destroy$.complete();
   }
+
 }

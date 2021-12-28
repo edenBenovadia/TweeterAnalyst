@@ -1,11 +1,11 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { map, Observable, pipe } from 'rxjs';
+import { map, Observable, of, pipe } from 'rxjs';
 import { transformToCharts } from '../utils';
 import { Aggregations, ChartEntities, Tweet } from '..';
 
 const GetTweetsURL = 'http://127.0.0.1:3000'
-const GetVolumeURL = 'http://mars.larium.ai:8003/tweets/get_pulse'
+const GetVolumeURL = 'http://mars.larium.ai:8003/tweets/get_pulse_by_ticker'
 
 @Injectable({
   providedIn: 'root'

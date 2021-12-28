@@ -22,8 +22,6 @@ export class FiltersComponent implements OnInit {
     this.analyzeStore.changeSymbol('AMZN');
     this.analyzeStore.changeAggregation(Aggregations.HOUR);
     this.analyzeStore.changeTimeRange(TimeRange.THREEDAYS);
-    this.analyzeStore.loadTweetsInRange();
-    this.analyzeStore.loadTweetsVolume();
   }
 
   chagneRange(range: TimeRange): void {
