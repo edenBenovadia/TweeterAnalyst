@@ -12,12 +12,13 @@ export interface Tweet {
 
 export interface ChartEntity {
     time: string;
-    value: string;
+    value: number;
 }
 
 export interface ChartEntities {
     name: string;
     series: ChartEntity[];
+    loading?: boolean;
 }
 
 export enum Aggregations {

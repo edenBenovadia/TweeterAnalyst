@@ -1,15 +1,15 @@
 import { Injectable } from "@angular/core";
 import { ComponentStore } from "@ngrx/component-store";
 import * as _ from "lodash";
-import { catchError, combineLatest, EMPTY, Observable, switchMap, tap, filter, distinctUntilChanged, distinctUntilKeyChanged, skipWhile } from "rxjs";
-import { Aggregations, ChartEntities, Tweet, TimeRange } from '../'
-import { timeFormat, hash } from '../utils'
+import { catchError, concatMap, EMPTY, Observable, switchMap, tap } from "rxjs";
+import { Aggregations, ChartEntities, Tweet, TimeRange, ChartEntity } from '../'
+import { timeFormat, hash, roundByMinutes, twoDigits, roundBy30Minutes } from '../utils'
 import { TweetsHttpsService } from "./tweets-https.service";
 
 interface StocksSate {
     activeSymbol: string,
     tweets: Map<string, Tweet[]>,
-    volumes: Map<string, ChartEntities>,
+    volumes: ChartEntities,
     aggregation: Aggregations,
     timeRange: TimeRange,
 }
@@ -19,7 +19,7 @@ const emptySate: StocksSate = {
   aggregation: Aggregations.NONE,
   timeRange: TimeRange.NONE,
   tweets: new Map<string, Tweet[]>(),
-  volumes: new Map<string, ChartEntities>(),
+  volumes: {name: '', series: []},
 }
 
 @Injectable({
@@ -36,15 +36,20 @@ export class AnalyzeStore extends ComponentStore<StocksSate> {
   readonly loadTweetsVolume = this.effect((payload$: Observable<any[]>) => {
     return payload$
     .pipe(
-      switchMap(([symbol, range, aggregation]) => {
-        const from = this.getDateFromRangeFormatted(range);
+      concatMap(([symbol]) => {
+        const from = this.getDateFromRangeFormatted(TimeRange.SEVENDAYS);
         const until = this.getDateFromRangeFormatted(TimeRange.NONE);
-        return this.tweetsHttpService.getVolumeForStock(symbol, from, until, aggregation)
+        this.setVolumeLoading(true);
+        return this.tweetsHttpService.getVolumeForStock(symbol, from, until, Aggregations.NONE)
         .pipe(
           tap(volumes => {
-            this.addVolume({volumes, symbol, timeRange: range, aggregation: aggregation});
+            this.addVolume(volumes);
+            this.setVolumeLoading(false);
           }),
-          catchError(() => EMPTY),
+          catchError(() => {
+            this.setVolumeLoading(false);
+            return EMPTY;
+          }),
         );
       })
     );
@@ -104,15 +109,10 @@ export class AnalyzeStore extends ComponentStore<StocksSate> {
     }
   });
 
-  readonly addVolume = this.updater((state, payload: {volumes: ChartEntities, symbol: string, timeRange: TimeRange, aggregation: Aggregations}) => {
-    const { volumes, symbol, timeRange, aggregation } = payload;
-    const key = hash(symbol + '_' + timeRange + '_' + aggregation);
-    const volumesMap = state.volumes;
-
-    volumesMap.set(key, volumes);
+  readonly addVolume = this.updater((state, volumes: ChartEntities) => {
     return {
       ...state,
-      volumes: volumesMap,
+      volumes: volumes,
     }
   });
 
@@ -120,6 +120,14 @@ export class AnalyzeStore extends ComponentStore<StocksSate> {
     ...state,
     aggregation,
   }));
+
+  readonly setVolumeLoading = this.updater((state, loading: boolean) => {
+    state.volumes.loading = loading;
+    
+    return {
+      ...state
+    };
+  });
   
   readonly addtimeRange = this.updater((state, timeRange: TimeRange) => ({
     ...state,
@@ -136,14 +144,15 @@ export class AnalyzeStore extends ComponentStore<StocksSate> {
   readonly timeRange$ = this.select(state => state.timeRange);
   
   readonly activeSymbol$ = this.select(state => state.activeSymbol);
+  
+  readonly isVolumeLoading$ = this.select(state => state.volumes.loading);
 
   readonly volumes$ = this.select(state => {
-    const key = hash(state.activeSymbol + '_' + state.timeRange + '_' + state.aggregation);
-    if (!state.volumes.has(key)) {
-      this.loadTweetsVolume([state.activeSymbol, state.timeRange, state.aggregation]);
+    if (_.isEmpty(state.volumes.series) && !state.volumes.loading) {
+      this.loadTweetsVolume([state.activeSymbol]);
     }
 
-    return state.volumes.get(key) || <ChartEntities> { name: '', series: [] };
+    return this.aggregate(state.aggregation, state.timeRange, state.volumes) || <ChartEntities> { name: '', series: [] };
   });
 
   readonly tweets$ = this.select(state => {
@@ -175,24 +184,126 @@ export class AnalyzeStore extends ComponentStore<StocksSate> {
     }
   }
 
+
+  private getTimeFromRange(range: TimeRange): any {
+    let date = new Date(Date.now());
+    switch(range) {
+      case TimeRange.SEVENDAYS:
+        date.setDate(date.getDate() - 7);
+        return date.getTime();
+      case TimeRange.THREEDAYS:
+        date.setDate(date.getDate() - 3);
+        return date.getTime();
+      case TimeRange.ONEDAY:
+        date.setDate(date.getDate() - 1);
+        return date.getTime();
+      default:
+        return date.getTime();
+    }
+  }
+
   /**
    * @param date 
    * @returns the date in respect with the Range yyyy:mm:dd:HH:MM:SS
    */
-     private getDateFromRangeFormatted(range: TimeRange): string {
+    private getDateFromRangeFormatted(range: TimeRange): string {
       let date = new Date(Date.now());
-      switch(range) {
-        case TimeRange.SEVENDAYS:
-          date.setDate(date.getDate() - 7);
-          return timeFormat(date);
-        case TimeRange.THREEDAYS:
-          date.setDate(date.getDate() - 3);
-          return timeFormat(date);
-        case TimeRange.ONEDAY:
-          date.setDate(date.getDate() - 1);
-          return timeFormat(date);
-        default:
-          return timeFormat(date);
+      if (range === TimeRange.NONE) {
+        return timeFormat(date);
       }
+      date.setDate(date.getDate() - 7);
+      return timeFormat(date);
+    }
+
+    private aggregate(aggregation: Aggregations, timeRange: TimeRange, data: ChartEntities | undefined): ChartEntities {
+      if (data == undefined) {
+        return {name: '', series: []};
+      }
+
+      const series = data.series.filter(item => new Date(item.time).getTime() >=  this.getTimeFromRange(timeRange));
+      const aggregated = new Map<string, number>();
+      switch(aggregation) {
+        case Aggregations.FIVEMIN:
+          series.forEach(i => {
+            const time = new Date(i.time);
+            const value = i.value;
+        
+            const key = time.getFullYear().toString()
+                        .concat(
+                            '-' + twoDigits(time.getMonth()).toString()
+                                .concat(
+                                    '-' + twoDigits(time.getDay()).toString()
+                                        .concat(
+                                            'T' + twoDigits(time.getHours()).toString()
+                                        )
+                                              .concat(
+                                                  ':' + twoDigits(roundByMinutes(time.getMinutes(), 5, 3))
+                                              )
+                                )
+                        );
+        
+            aggregated.set(key, (aggregated.get(key) || 0) + value)
+        });
+        break;
+
+        case Aggregations.Min:
+          series.forEach(i => {
+            const time = new Date(i.time);
+            const value = i.value;
+        
+            const key = time.getFullYear().toString()
+                        .concat(
+                            '-' + twoDigits(time.getMonth()).toString()
+                                .concat(
+                                    '-' + twoDigits(time.getDay()).toString()
+                                        .concat(
+                                            'T' + twoDigits(time.getHours()).toString()
+                                        )
+                                              .concat(
+                                                  ':' + twoDigits(roundByMinutes(time.getMinutes(), 1, 0.5))
+                                              )
+                                )
+                        );
+        
+            aggregated.set(key, (aggregated.get(key) || 0) + value)
+        });
+        break;
+
+        case Aggregations.THIRTYMIN:
+          series.forEach(i => {
+            const time = new Date(i.time);
+            const value = i.value;
+            
+            roundBy30Minutes(time); //mutable function
+            const key = time.getFullYear().toString()
+                        .concat(
+                            '-' + twoDigits(time.getMonth()).toString()
+                                .concat(
+                                    '-' + twoDigits(time.getDay()).toString()
+                                        .concat(
+                                            'T' + twoDigits(time.getHours()).toString()
+                                        )
+                                              .concat(
+                                                  ':' + twoDigits(time.getMinutes())
+                                              )
+                                )
+                        );
+        
+            aggregated.set(key, (aggregated.get(key) || 0) + value)
+          });
+          break;
+    }
+      
+
+      const result: ChartEntity[] = []
+      for (const key of aggregated.keys()) {
+          const timeSplited: number[] = key.split(/[- :T]/).map(t => Number.parseInt(t));
+          result.push(<ChartEntity>{
+              time: new Date(timeSplited[0], timeSplited[1], timeSplited[2], timeSplited[3], timeSplited[4], 0).toISOString(),
+              value: aggregated.get(key),
+          });
+      }
+
+      return {name: '', series: result};
     }
 }

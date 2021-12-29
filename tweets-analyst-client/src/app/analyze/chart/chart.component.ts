@@ -1,7 +1,7 @@
 import { ChangeDetectorRef, Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { ChartEntities, ChartEntity, Tweet } from '..';
 import { AnalyzeStore } from '../services/analyze.store';
-import { Subject, takeUntil } from 'rxjs';
+import { BehaviorSubject, Subject, takeUntil, combineLatest, skipWhile } from 'rxjs';
 import * as _ from 'lodash';
 
 
@@ -13,6 +13,7 @@ import * as _ from 'lodash';
 export class ChartComponent implements OnInit, OnDestroy {
   public tweets: Tweet[] = [];
   public echartInstance: any;
+  public echartInstance$: BehaviorSubject<any> = new BehaviorSubject(null);
   public options: any;
   public updateOptions: any;
     
@@ -25,6 +26,28 @@ export class ChartComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    combineLatest([this.analyzeStore.isVolumeLoading$, this.echartInstance$.asObservable()])
+    .pipe(
+      skipWhile(([_, echarts]) => !echarts),
+      takeUntil(this.destroy$)
+    ).subscribe(([loading, echarts]) => {
+      if (!this.echartInstance) {
+        return;
+      }
+
+      if (loading) {
+        this.echartInstance.showLoading({
+          maskColor: '#333333',
+          color: 'whitesmoke',
+          textColor: 'whitesmoke',
+        });
+      } else {
+        this.echartInstance.hideLoading();
+        this.echartInstance.setOptions(this.options);
+        this.cd.detectChanges();
+      }
+    });
+
     this.analyzeStore.volumes$
     .pipe(
       takeUntil(this.destroy$),
@@ -59,11 +82,13 @@ export class ChartComponent implements OnInit, OnDestroy {
 
   private updateChart(entities: ChartEntities) {
     const xAxisData: string[] = [];
-    const data: string[] = []
+    const data: number[] = [];
+
     entities.series.forEach((t: ChartEntity) => {
       xAxisData.push(new Date(t.time).toDateString());
       data.push(t.value);
     });
+
     if (!this.echartInstance) {
       return;
     }
@@ -90,6 +115,7 @@ export class ChartComponent implements OnInit, OnDestroy {
       return;
 
     this.echartInstance = ec
+    this.echartInstance$.next(ec);
   }
 
   ngOnDestroy(): void {
