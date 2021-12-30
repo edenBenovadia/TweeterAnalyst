@@ -43,6 +43,23 @@ export function hash(str: string) {
     return ("0000000" + (hval >>> 0).toString(16)).substring(-8);
 }
 
-function twoDigits(time: number) {
+export function roundByMinutes(units: number, aggregation: number, middle: number) {
+    return units < aggregation ? (units < middle ? 0 : aggregation) : units - ((units % aggregation) < middle ? (units % aggregation) : -(aggregation - units % aggregation))
+}
+
+export function roundBy30Minutes(date: Date) {
+    if (date.getMinutes() >= 45) {
+        date.setHours(date.getHours() + 1);
+        date.setMinutes(0);
+    } else if (date.getMinutes() >= 30 && date.getMinutes() < 45) {
+        date.setMinutes(30)
+    } else if (date.getMinutes() >= 15 && date.getMinutes() < 30) {
+        date.setMinutes(30)
+    } else {
+        date.setMinutes(0);
+    }
+}
+
+export function twoDigits(time: number) {
     return (time < 10 ? '0' : '') + time;
 }

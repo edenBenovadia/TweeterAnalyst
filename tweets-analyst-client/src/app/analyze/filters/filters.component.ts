@@ -20,8 +20,8 @@ export class FiltersComponent implements OnInit {
 
   ngOnInit(): void {
     this.analyzeStore.changeSymbol('AMZN');
-    this.analyzeStore.changeAggregation(Aggregations.HOUR);
-    this.analyzeStore.changeTimeRange(TimeRange.THREEDAYS);
+    this.analyzeStore.changeAggregation(Aggregations.THIRTYMIN);
+    this.analyzeStore.changeTimeRange(TimeRange.ONEDAY);
   }
 
   chagneRange(range: TimeRange): void {
