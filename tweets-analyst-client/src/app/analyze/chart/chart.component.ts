@@ -43,7 +43,6 @@ export class ChartComponent implements OnInit, OnDestroy {
         });
       } else {
         this.echartInstance.hideLoading();
-        this.echartInstance.setOptions(this.options);
         this.cd.detectChanges();
       }
     });
@@ -61,6 +60,9 @@ export class ChartComponent implements OnInit, OnDestroy {
         splitLine: {
           show: false,
         },
+        axisTick: {
+          show: false
+        }
       },
       yAxis: {},
       series: [
@@ -103,6 +105,10 @@ export class ChartComponent implements OnInit, OnDestroy {
       ],
       xAxis: {
         data: xAxisData,
+        axisTick: {
+          show: false
+        },
+        offset: 45
       },
       yAxis: {
 
