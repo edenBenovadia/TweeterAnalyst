@@ -24,13 +24,12 @@ export class TweetsRetriever {
 
         try {
             const result = await axios.post(BACKEND_URL + token_route, params, {timeout: 6500, verify: false});
-            console.log(result);
-            if (!!result.text) {
-                this.headers = result.text['access_token'];
-                return this.headers;
-            } else {
+            if (!result.text) {
                 return undefined;
             }
+
+            this.headers = result.text['access_token'];
+            return this.headers;
         } catch (err) {
             console.log('error loading ' + err);
             return undefined;
